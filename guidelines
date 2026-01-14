@@ -1,0 +1,21 @@
+# Development Guidelines for wrtp
+
+## Core Philosophy
+- **Daemon-free**: No background services. Execution must be deterministic (Start -> Action -> Terminate).
+- **Transparency**: Clear feedback via GUI/CLI regarding input capturing.
+- **Portability**: Use normalized coordinates (0.0 to 1.0) to ensure scripts work across different display resolutions.
+
+## Technical Standards
+- **Input Handling**: Use `evdev` for recording and `uinput` for playback.
+- **State Management**: Use a PID-based lockfile (`/tmp/wrtp.lock`) to toggle between "Start Recording" and "Stop Recording".
+- **Safety**: Ensure a "Panic Break" (e.g., press `ESC` for 3 seconds) is always active during playback to stop the mouse.
+
+## Coordination Logic
+- All captured `(x, y)` must be converted to `(u, v)` immediately:
+  - $u = x / display\_width$
+  - $v = y / display\_height$
+- All timestamps must be relative to the first event to minimize drift.
+
+## Error Handling
+- Fail gracefully if `/dev/uinput` is not writable.
+- Provide clear instructions for `udev` rule configuration if permissions are denied.
