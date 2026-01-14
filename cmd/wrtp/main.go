@@ -25,6 +25,12 @@ const (
 )
 
 func main() {
+	if os.Getuid() == 0 {
+		fmt.Fprintf(os.Stderr, "Warning: Running as root is not recommended.\n")
+		fmt.Fprintf(os.Stderr, "This program handles 'sudo' internally for input recording.\n")
+		fmt.Fprintf(os.Stderr, "Running as root may cause the UI overlay to fail due to X11/Wayland display permissions.\n\n")
+	}
+
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
 		fmt.Fprintf(flag.CommandLine.Output(), "  wrtp is a daemon-free state toggle utility for recording mouse and keyboard actions on Wayland.\n")
@@ -105,9 +111,9 @@ func startRecording() {
 
 	fmt.Printf("Started recording (PID: %d). Press Ctrl+C or run again to stop.\n", pid)
 
-	// Setup overlay
+	// Setup overlay UI on main thread
 	overlayApp := app.New()
-	go showOverlay(overlayApp)
+	w := createOverlayWindow(overlayApp)
 
 	// Setup signal handling for cleanup
 	sigChan := make(chan os.Signal, 1)
@@ -116,25 +122,33 @@ func startRecording() {
 	done := make(chan bool, 1)
 
 	go func() {
+		// Run recording logic in background
+		Record(done, 0)
+		fyne.Do(func() {
+			w.Close()
+		})
+	}()
+
+	go func() {
 		sig := <-sigChan
 		fmt.Printf("\nReceived signal: %v. Cleaning up...\n", sig)
 		cleanup()
-		overlayApp.Quit()
+		fyne.Do(func() {
+			w.Close()
+		})
 		done <- true
 	}()
 
-	Record(done, 0)
-
-	overlayApp.Quit()
+	w.ShowAndRun()
 	fmt.Println("\nRecording finished.")
 }
 
 func runTestMode() {
 	fmt.Println("Test Mode: Recording for 5 seconds...")
 	
-	// Setup overlay
+	// Setup overlay UI on main thread
 	overlayApp := app.New()
-	go showOverlay(overlayApp)
+	w := createOverlayWindow(overlayApp)
 
 	// Setup signal handling to allow interrupting test mode
 	sigChan := make(chan os.Signal, 1)
@@ -156,20 +170,27 @@ func runTestMode() {
 		}
 	}()
 
-	Record(done, 5*time.Second)
+	go func() {
+		// Run test logic in background
+		Record(done, 5*time.Second)
+		fyne.Do(func() {
+			w.Close()
+		})
+	}()
 
-	overlayApp.Quit()
+	w.ShowAndRun()
 
 	if interrupted {
 		return
 	}
 
 	fmt.Println("\nRecording finished. Playing back once...")
+	checkLibinputQuirks()
 	Play()
 	fmt.Println("Playback finished.")
 }
 
-func showOverlay(a fyne.App) {
+func createOverlayWindow(a fyne.App) fyne.Window {
 	w := a.NewWindow("wrtp-overlay")
 	w.SetFixedSize(true)
 	w.Resize(fyne.NewSize(120, 40))
@@ -193,7 +214,16 @@ func showOverlay(a fyne.App) {
 	)
 
 	w.SetContent(content)
-	w.ShowAndRun()
+	return w
+}
+
+func checkLibinputQuirks() {
+	const quirksPath = "/etc/libinput/local-overrides.quirks"
+	if exists(quirksPath) {
+		fmt.Fprintf(os.Stderr, "\nWarning: %s exists.\n", quirksPath)
+		fmt.Fprintf(os.Stderr, "libinput replay will fail on some systems if this file exists.\n")
+		fmt.Fprintf(os.Stderr, "Suggested fix: sudo mv %s %s.bak\n\n", quirksPath, quirksPath)
+	}
 }
 
 func cleanup() {
@@ -212,8 +242,8 @@ func Record(done chan bool, limit time.Duration) {
 		os.Remove(tempInputFile)
 	}
 
-	// Using sudo libinput record --all -o <file>
-	cmd := exec.Command("sudo", "libinput", "record", "--all", "-o", tempInputFile)
+	// Using sudo libinput record --all --show-keycodes -o <file>
+	cmd := exec.Command("sudo", "libinput", "record", "--all", "--show-keycodes", "-o", tempInputFile)
 	
 	// Capture stderr to debug failures
 	stderr, err := cmd.StderrPipe()
