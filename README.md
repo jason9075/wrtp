@@ -1,5 +1,7 @@
 # wrtp (Wayland Record To Play)
 
+![Go](https://github.com/jason9075/wrtp/actions/workflows/go.yml/badge.svg)
+
 `wrtp` is a lightweight, daemon-free input automation tool designed specifically for Wayland. It allows you to record mouse and keyboard actions and replay them with resolution independence.
 
 ## Features

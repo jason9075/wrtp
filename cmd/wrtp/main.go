@@ -27,10 +27,13 @@ const (
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
-		fmt.Fprintf(flag.CommandLine.Output(), "  wrtp is a daemon-free state toggle utility for recording on Wayland.\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "  Running it without flags will toggle (start/stop) the recording.\n\n")
+		fmt.Fprintf(flag.CommandLine.Output(), "  wrtp is a daemon-free state toggle utility for recording mouse and keyboard actions on Wayland.\n")
+		fmt.Fprintf(flag.CommandLine.Output(), "  Running it without flags will toggle (start/stop) the recording.\n")
+		fmt.Fprintf(flag.CommandLine.Output(), "  NOTE: Most operations require 'sudo' to access /dev/input devices.\n\n")
 		fmt.Fprintf(flag.CommandLine.Output(), "Flags:\n")
 		flag.PrintDefaults()
+		fmt.Fprintf(flag.CommandLine.Output(), "  -h, -help\n")
+		fmt.Fprintf(flag.CommandLine.Output(), "    \tShow this help message\n")
 	}
 
 	testMode := flag.Bool("test", false, "Record for 5 seconds and play once")
