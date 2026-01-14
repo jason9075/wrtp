@@ -45,14 +45,15 @@ sudo go run cmd/wrtp/main.go
 sudo go run cmd/wrtp/main.go
 ```
 
-### 3. Replaying a Recording
-After recording, the actions are saved to `/tmp/wrtp.yml`. You can replay them manually:
+### 3. Manual Replay
+Replay the latest recording directly.
 ```bash
-sudo libinput replay --replay-after 0 --once /tmp/wrtp.yml
+./bin/wrtp --play
 ```
 
 ## CLI Flags
-- `--test`: Record for 5 seconds and play back once.
+- `--test <seconds>`: Record for N seconds (e.g., `--test 10`) and play back once.
+- `--play`: Replay the latest recording.
 - `--help`: Show the usage message.
 
 ## Overlay UI

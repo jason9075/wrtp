@@ -22,7 +22,34 @@ import (
 const (
 	lockFile      = "/tmp/wrtp.lock"
 	tempInputFile = "/tmp/wrtp.yml"
+	posFile       = "/tmp/wrtp.pos"
 )
+
+func saveCursorPos() {
+	out, err := exec.Command("hyprctl", "cursorpos").Output()
+	if err != nil {
+		// Silently fail if not on Hyprland or hyprctl fails
+		return
+	}
+	_ = os.WriteFile(posFile, out, 0644)
+}
+
+func restoreCursorPos() {
+	data, err := os.ReadFile(posFile)
+	if err != nil {
+		return
+	}
+
+	// hyprctl cursorpos returns "x, y"
+	var x, y int
+	n, err := fmt.Sscanf(string(data), "%d, %d", &x, &y)
+	if err != nil || n != 2 {
+		return
+	}
+
+	fmt.Printf("Restoring cursor to %d, %d\n", x, y)
+	_ = exec.Command("hyprctl", "dispatch", "movecursor", strconv.Itoa(x), strconv.Itoa(y)).Run()
+}
 
 func main() {
 	if os.Getuid() == 0 {
@@ -42,11 +69,19 @@ func main() {
 		fmt.Fprintf(flag.CommandLine.Output(), "    \tShow this help message\n")
 	}
 
-	testMode := flag.Bool("test", false, "Record for 5 seconds and play once")
+	testDuration := flag.Int("test", 0, "Record for N seconds and play once")
+	playMode := flag.Bool("play", false, "Replay the latest recording")
 	flag.Parse()
 
-	if *testMode {
-		runTestMode()
+	if *testDuration > 0 {
+		runTestMode(*testDuration)
+		return
+	}
+
+	if *playMode {
+		checkLibinputQuirks()
+		restoreCursorPos()
+		Play()
 		return
 	}
 
@@ -103,6 +138,7 @@ func stopExisting() {
 }
 
 func startRecording() {
+	saveCursorPos()
 	pid := os.Getpid()
 	err := os.WriteFile(lockFile, []byte(strconv.Itoa(pid)), 0644)
 	if err != nil {
@@ -143,8 +179,9 @@ func startRecording() {
 	fmt.Println("\nRecording finished.")
 }
 
-func runTestMode() {
-	fmt.Println("Test Mode: Recording for 5 seconds...")
+func runTestMode(seconds int) {
+	fmt.Printf("Test Mode: Recording for %d seconds...\n", seconds)
+	saveCursorPos()
 	
 	// Setup overlay UI on main thread
 	overlayApp := app.New()
@@ -158,10 +195,12 @@ func runTestMode() {
 	done := make(chan bool, 1)
 	interrupted := false
 
-	// Automatically signal done after 5 seconds OR if Ctrl+C pressed
+	dur := time.Duration(seconds) * time.Second
+
+	// Automatically signal done after duration OR if Ctrl+C pressed
 	go func() {
 		select {
-		case <-time.After(5 * time.Second):
+		case <-time.After(dur):
 			done <- true
 		case sig := <-sigChan:
 			fmt.Printf("\nReceived signal: %v. Stopping test mode...\n", sig)
@@ -172,7 +211,7 @@ func runTestMode() {
 
 	go func() {
 		// Run test logic in background
-		Record(done, 5*time.Second)
+		Record(done, dur)
 		fyne.Do(func() {
 			w.Close()
 		})
@@ -186,6 +225,7 @@ func runTestMode() {
 
 	fmt.Println("\nRecording finished. Playing back once...")
 	checkLibinputQuirks()
+	restoreCursorPos()
 	Play()
 	fmt.Println("Playback finished.")
 }
